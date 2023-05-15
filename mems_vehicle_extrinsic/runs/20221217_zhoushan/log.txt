@@ -1,0 +1,20 @@
+dataset@dataset-virtual-machine:~/SensorsCalibration/imu_heading/auto_calib$ ./bin/run_imu_heading 1 ./data/zhoushan_20221217_20221221/
+
+Yaw Calib:
+best score: 0.714536
+GT value(degree): 27.1044
+GNSS value(degree): 27.1453
+Offset(degree): -0.040898
+
+Check result:
+origin_v_componet: -1.64893
+  max: 2.156
+  min: 0.96935
+calibrated_v_componet: -1.65056
+  max: 2.15809
+  min: 0.970363
+Euler2RotationMatrix result is:
+R =
+-0.000713804           -1            0
+           1 -0.000713804            0
+           0            0            1

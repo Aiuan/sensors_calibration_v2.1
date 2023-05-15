@@ -1,0 +1,21 @@
+dataset@dataset-virtual-machine:~/SensorsCalibration/imu_heading/auto_calib$ ./bin/run_imu_heading 1 ./data/yantai_20221223_20221226/
+Create dir: ./data/yantai_20221223_20221226/calibration/
+
+Yaw Calib:
+best score: 1
+GT value(degree): 179.535
+GNSS value(degree): 179.062
+Offset(degree): 0.472131
+
+Check result:
+origin_v_componet: -2.47447
+  max: 2.69229
+  min: 2.07651
+calibrated_v_componet: -2.47489
+  max: 2.69277
+  min: 2.07668
+Euler2RotationMatrix result is:
+R =
+0.00824015  -0.999966          0
+  0.999966 0.00824015          0
+         0          0          1
