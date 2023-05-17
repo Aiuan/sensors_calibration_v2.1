@@ -183,31 +183,29 @@ cameraParams2 = create_cameraParams(imagePoints(:,:,:,2), worldPoints, intrinsic
     cameraParams1, cameraParams2);
 stereoParams = stereoParameters(cameraParams1, cameraParams2, R, t);
 
-% Calibrate reprojection errors
 isIntrinsicsFixed = true;
 shouldComputeErrors = 1;
 estimationErrors = refine(stereoParams, imagePoints(:,:,:,1), ...
     imagePoints(:,:,:,2), shouldComputeErrors, isIntrinsicsFixed);
+displayErrors(estimationErrors, stereoParams);
 
 % View reprojection errors
 figure();
 showReprojectionErrors(stereoParams);
-savefig(fullfile(output_folder, sprintf("%s_to_%s_error.fig", camera_name2, camera_name1)));
+xticks(1:n_pairs);
+xticklabels(replace(params1{:, 'image_name'}, "_", "\_"));
+% savefig(fullfile(output_folder, sprintf("%s_to_%s_error.fig", camera_name2, camera_name1)));
 
 % Visualize pattern locations
 figure();
 showExtrinsics(stereoParams, 'CameraCentric');
 
-% Display parameter estimation errors
-displayErrors(estimationErrors, stereoParams);
-
 % save as json
-RT = stereoParams.PoseCamera2.A;
-RT(1:3, 4) = RT(1:3, 4) / 1e3;
-RT = inv(RT);
-json_data = struct("extrinsic_matrix", RT);
+% camera2 to camera1 extinsic
+tform = invert(rigidtform3d(stereoParams.PoseCamera2.R, stereoParams.PoseCamera2.Translation/1e3));
+json_data = struct("extrinsic_matrix", tform.A);
 json_path = fullfile(output_folder, sprintf("%s_to_%s_extrinsic.json", camera_name2, camera_name1));
 savejson('', json_data, json_path);
 
 % save stereoParams
-save(fullfile(output_folder, sprintf("%s_to_%s.mat", camera_name2, camera_name1)), "stereoParams");
+% save(fullfile(output_folder, sprintf("%s_to_%s.mat", camera_name2, camera_name1)), "stereoParams");
