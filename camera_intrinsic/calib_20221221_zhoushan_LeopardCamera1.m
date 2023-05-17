@@ -7,6 +7,9 @@ board_nrow = 10;
 board_ncol = 9;
 show_on = 1;
 output_root = "runs";
+error_mean_thred = 0.2;
+error_std_thred = 0.1;
+n_thred = 10;
 
 output_folder = fullfile(output_root, exp_name);
 if ~exist(output_folder, "dir")
@@ -93,31 +96,61 @@ for i = 1:size(params, 1)
         scatter(points(:, 1), points(:, 2), 100, 'red', '+', 'LineWidth', 2);
         hold off; 
         title(image_path);
+
+%         savefig(fullfile(output_folder, ...
+%             sprintf("%s_%d_%s.fig", camera_name, i, params{i, 'image_name'}{1})));
     end
     
     fprintf("%s detect %d points\n", image_path, size(points, 1));
 
 end
 
+imagesUsed = true(size(params, 1), 1);
 worldPoints = generateCheckerboardPoints(boardSize, squareSizeInMM);
 imageSize = [size(image, 1), size(image, 2)];
 % Calibrate the camera
-[cameraParams, imagesUsed, estimationErrors] = estimateCameraParameters(imagePoints, worldPoints, ...
-    'EstimateSkew', false, 'EstimateTangentialDistortion', true, ...
-    'NumRadialDistortionCoefficients', 3, 'WorldUnits', 'millimeters', ...
-    'InitialIntrinsicMatrix', [], 'InitialRadialDistortion', [], 'ImageSize', imageSize);
+while true
+    if exist("errors", "var")
+        [~, i_error] = max(errors);
+        i_use = find(imagesUsed);
+        imagesUsed(i_use(i_error)) = false;
+    end
 
-% View reprojection errors
-figure();
-showReprojectionErrors(cameraParams);
+    cameraParams = estimateCameraParameters( ...
+        imagePoints(:, :, imagesUsed), worldPoints(:, :), ...
+        'EstimateSkew', false, 'EstimateTangentialDistortion', true, ...
+        'NumRadialDistortionCoefficients', 3, 'WorldUnits', 'millimeters', ...
+        'InitialIntrinsicMatrix', [], 'InitialRadialDistortion', [], 'ImageSize', imageSize);
+    errors = mean(sqrt(squeeze(cameraParams.ReprojectionErrors(:, 1, :)).^2 + ...
+        squeeze(cameraParams.ReprojectionErrors(:, 1, :)).^2), 1);
+
+    figure(2);
+    bar(errors);
+    xticks(1:size(errors, 2));
+    xticklabels(replace(params{imagesUsed, 'image_name'}, "_", "\_"));
+    yline(mean(errors), '--r');
+    text(size(errors, 2), mean(errors), sprintf("mean=%.2f\nstd=%.2f", mean(errors), std(errors)), ...
+        "HorizontalAlignment", "center", "VerticalAlignment", "bottom", "Color", "red");
+    ylabel("ReprojectionErrors");
+    grid on;
+
+    if mean(errors) <= error_mean_thred
+        break;
+    end
+
+    if std(errors) <= error_std_thred
+        break;
+    end
+
+    if sum(imagesUsed) <= n_thred
+        break;
+    end
+end
 savefig(fullfile(output_folder, sprintf("%s_error.fig", camera_name)));
 
 % Visualize pattern locations
 figure();
 showExtrinsics(cameraParams, 'CameraCentric');
-
-% Display parameter estimation errors
-displayErrors(estimationErrors, cameraParams);
 
 % save as json
 addpath('../3rdpart/jsonlab');
@@ -129,4 +162,4 @@ json_path = fullfile(output_folder, sprintf("%s_intrinsic.json", camera_name));
 savejson('', json_data, json_path);
 
 % save cameraParams
-save(fullfile(output_folder, sprintf("%s.mat", camera_name)), "cameraParams");
+% save(fullfile(output_folder, sprintf("%s.mat", camera_name)), "cameraParams");
