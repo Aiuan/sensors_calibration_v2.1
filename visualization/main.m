@@ -1,7 +1,9 @@
 clearvars; close all; clc;
 addpath("../3rdpart/jsonlab");
 
-root_data = "./data";
+name = 'yantai';
+root_data = fullfile("./data", name);
+root_calib = fullfile("../results", name);
 
 labels = loadjson(fullfile(root_data, "label.json"));
 image_IRayCamera = imread(fullfile(root_data, "IRayCamera.png"));
@@ -11,19 +13,19 @@ pcd_VelodyneLidar = load_VelodyneLidar_pcd(fullfile(root_data, "VelodyneLidar.pc
 pcd_TIRadar = load_TIRadar_pcd(fullfile(root_data, "TIRadar.pcd"));
 pcd_OCULiiRadar = load_OCULiiRadar_pcd(fullfile(root_data, "OCULiiRadar.pcd"));
 
-IRayCamera_intrinsic = load_intrinsic(fullfile(root_data, "IRayCamera_intrinsic.json"));
-LeopardCamera0_intrinsic = load_intrinsic(fullfile(root_data, "LeopardCamera0_intrinsic.json"));
-LeopardCamera1_intrinsic = load_intrinsic(fullfile(root_data, "LeopardCamera1_intrinsic.json"));
-VelodyneLidar_to_IRayCamera_extrinsic = load_extrinsic( ...
-    fullfile(root_data, "VelodyneLidar_to_IRayCamera_extrinsic.json"));
+IRayCamera_intrinsic = load_intrinsic(fullfile(root_calib, "IRayCamera_intrinsic.json"));
+IRayCamera_to_LeopardCamera0_extrinsic = load_extrinsic( ...
+    fullfile(root_calib, "IRayCamera_to_LeopardCamera0_extrinsic.json"));
+LeopardCamera0_intrinsic = load_intrinsic(fullfile(root_calib, "LeopardCamera0_intrinsic.json"));
+LeopardCamera1_intrinsic = load_intrinsic(fullfile(root_calib, "LeopardCamera1_intrinsic.json"));
+LeopardCamera1_to_LeopardCamera0_extrinsic = load_extrinsic( ...
+    fullfile(root_calib, "LeopardCamera1_to_LeopardCamera0_extrinsic.json"));
 VelodyneLidar_to_LeopardCamera0_extrinsic = load_extrinsic( ...
-    fullfile(root_data, "VelodyneLidar_to_LeopardCamera0_extrinsic.json"));
-VelodyneLidar_to_LeopardCamera1_extrinsic = load_extrinsic( ...
-    fullfile(root_data, "VelodyneLidar_to_LeopardCamera1_extrinsic.json"));
+    fullfile(root_calib, "VelodyneLidar_to_LeopardCamera0_extrinsic.json"));
 TIRadar_to_LeopardCamera0_extrinsic = load_extrinsic( ...
-    fullfile(root_data, "TIRadar_to_LeopardCamera0_extrinsic.json"));
+    fullfile(root_calib, "TIRadar_to_LeopardCamera0_extrinsic.json"));
 OCULiiRadar_to_LeopardCamera0_extrinsic = load_extrinsic( ...
-    fullfile(root_data, "OCULiiRadar_to_LeopardCamera0_extrinsic.json"));
+    fullfile(root_calib, "OCULiiRadar_to_LeopardCamera0_extrinsic.json"));
 
 
 
@@ -40,6 +42,7 @@ c.Limits = [0, 255];
 xlabel("x");
 ylabel("y");
 zlabel("z");
+title("VelodyneLidar");
 view([-10, 40]);
 
 for i = 1:length(labels)
@@ -94,6 +97,7 @@ c.Color = 'w';
 xlabel("x");
 ylabel("y");
 zlabel("z");
+title("OCULiiRadar");
 view([-10, 40]);
 
 for i = 1:length(labels)
@@ -148,6 +152,7 @@ c.Color = 'w';
 xlabel("x");
 ylabel("y");
 zlabel("z");
+title("TIRadar");
 view([-10, 40]);
 
 for i = 1:length(labels)
@@ -213,6 +218,9 @@ for i = 1:length(labels)
                   0,          0, 1];
     
     bbox = rot * corners + [x; y; z];
+
+    VelodyneLidar_to_IRayCamera_extrinsic = rigidtform3d(invert(IRayCamera_to_LeopardCamera0_extrinsic).A * ...
+        VelodyneLidar_to_LeopardCamera0_extrinsic.A);
     [uv, ~]= projectLidarPointsOnImage(pointCloud(bbox'), ...
         IRayCamera_intrinsic, VelodyneLidar_to_IRayCamera_extrinsic);
     uv = uv';
@@ -299,6 +307,9 @@ for i = 1:length(labels)
                   0,          0, 1];
     
     bbox = rot * corners + [x; y; z];
+
+    VelodyneLidar_to_LeopardCamera1_extrinsic = rigidtform3d(invert(LeopardCamera1_to_LeopardCamera0_extrinsic).A * ...
+        VelodyneLidar_to_LeopardCamera0_extrinsic.A);
     [uv, ~]= projectLidarPointsOnImage(pointCloud(bbox'), ...
         LeopardCamera1_intrinsic, VelodyneLidar_to_LeopardCamera1_extrinsic);
     uv = uv';
@@ -313,3 +324,9 @@ for i = 1:length(labels)
             "HorizontalAlignment", "center", "VerticalAlignment", "bottom", "Color", "b");
     end    
 end
+
+%% LeopardCamera0 & LeopardCamera1
+stereoParams = stereoParameters(LeopardCamera0_intrinsic, LeopardCamera1_intrinsic, invert(LeopardCamera1_to_LeopardCamera0_extrinsic));
+[I0Rect,I1Rect] = rectifyStereoImages(image_LeopardCamera0, image_LeopardCamera0, stereoParams);
+figure(); 
+imshow(stereoAnaglyph(I0Rect,I1Rect));
