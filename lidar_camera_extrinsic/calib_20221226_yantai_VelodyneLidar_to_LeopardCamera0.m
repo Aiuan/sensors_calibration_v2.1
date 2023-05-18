@@ -10,11 +10,19 @@ board_ncol = 7;
 show_on = 1;
 output_root = "runs";
 checkboardDimensionInMM = [726, 922];
+fval_thred = 0.25;
+n_thred = 1;
 
 output_folder = fullfile(output_root, exp_name);
 if ~exist(output_folder, "dir")
     mkdir(output_folder);
 end
+
+figoutput_folder = fullfile(output_root, exp_name, sprintf("%s_to_%s", lidar_name, camera_name));
+if exist(figoutput_folder, "dir")
+    rmdir(figoutput_folder, 's');
+end
+mkdir(figoutput_folder);
 
 % Load instrinsic
 json_data = loadjson(fullfile("data", exp_name, sprintf("%s_intrinsic.json", camera_name)));
@@ -186,11 +194,6 @@ lidarCheckerboardPlanes = pointCloud([0,0,0]);
 lidarCorners3d = zeros(n_corners, 3, n_pairs);
 % manual
 index_first_manual = zeros(n_pairs, 1);
-index_first_manual(4) = 4;
-index_first_manual(11) = 4;
-index_first_manual(13) = 4;
-index_first_manual(21) = 4;
-index_first_manual(22) = 4;
 for i = 1:n_pairs
     % get the corners from pixel coordinate to world coordinate
     cornerWorldPts = H(:,:,i) \ [imageCorners_undistorted(:, :, i), ones(n_corners, 1)]';
@@ -303,12 +306,15 @@ for i = 1:n_pairs
         ylabel('y');
         zlabel('z');
         view([30,10]);
+
+        savefig(fullfile(figoutput_folder, ...
+            sprintf("%s.fig", camera_frames{index_camera, 'image_name'}{1})));
     end
 end
 
 % Calibrate Lidar to Camera
 tform_init = computeInitialTransform(lidarCorners3d, imageCorners3d);
-tform = refineTransform(lidarCorners3d, imageCorners3d, tform_init);
+[tform, fval, n_use] = refineTransform(lidarCorners3d, imageCorners3d, tform_init, fval_thred, n_thred);
 
 %% fuse visit lidar and camera
 if show_on
@@ -348,17 +354,19 @@ if show_on
         ylabel('y');
         zlabel('z');
         title('pcd_checkboard_with_color', 'Interpreter', 'none', "Color", 'w');
+
+        savefig(fullfile(figoutput_folder, ...
+            sprintf("vis_%s.fig", camera_frames{index_camera, 'image_name'}{1})));
     end
 end
 
 % calculate and visualize errors
 [errors_translation, errors_rotation, errors_reprojection] = computeErrors( ...
     lidarCorners3d, imageCorners3d, cameraParams, tform);
-helperShowError(errors_translation, errors_rotation, errors_reprojection);
+helperShowError(errors_translation, errors_rotation, errors_reprojection, camera_frames{:, 'image_name'});
 savefig(fullfile(output_folder, sprintf("%s_to_%s_error.fig", lidar_name, camera_name)));
 
 % save as json
-RT = tform.A;
-json_data = struct("extrinsic_matrix", RT);
+json_data = struct("extrinsic_matrix", tform.A);
 json_path = fullfile(output_folder, sprintf("%s_to_%s_extrinsic.json", lidar_name, camera_name));
 savejson('', json_data, json_path);

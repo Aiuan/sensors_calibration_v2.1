@@ -1,11 +1,11 @@
-function [tform, fval]  = refineTransform(lidarCorners, imageCorners, initialTransformation)
+function [tform, fval, n_use]  = refineTransform(lidarCorners, imageCorners, initialTransformation, fval_thred, n_thred)
     % Extract normals of checkerboard in images
     imNew = reshape(permute(imageCorners, [2 1 3]), size(imageCorners, 2), [])';
     lic = reshape(permute(lidarCorners, [2 1 3]), size(lidarCorners, 2), [])';
     [tform, ~, fval] = pcregistericp(pointCloud(lic), pointCloud(imNew),  ...
         'InitialTransform', initialTransformation, 'MaxIterations', 1000);
     % Filter frames with high errors
-    while fval > 0.2 && size(lidarCorners, 3) > 1
+    while fval > fval_thred && size(lidarCorners, 3) >= n_thred
         error = computeError(lidarCorners, imageCorners, tform);
         [~, index] = max(error);
         %index = randi(size(lidarCorners, 3), 1);
@@ -16,6 +16,7 @@ function [tform, fval]  = refineTransform(lidarCorners, imageCorners, initialTra
         [tform, ~, fval] = pcregistericp(pointCloud(lic), pointCloud(imNew),...
             'InitialTransform', tform, 'MaxIterations', 1000);
     end
+    n_use = size(imageCorners, 3);
 end
 
 %-------------------------------------------------------------------

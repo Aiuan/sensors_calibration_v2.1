@@ -10,11 +10,19 @@ board_ncol = 9;
 show_on = 1;
 output_root = "runs";
 checkboardDimensionInMM = [1200, 1200];
+fval_thred = 0.07;
+n_thred = 1;
 
 output_folder = fullfile(output_root, exp_name);
 if ~exist(output_folder, "dir")
     mkdir(output_folder);
 end
+
+figoutput_folder = fullfile(output_root, exp_name, sprintf("%s_to_%s", lidar_name, camera_name));
+if exist(figoutput_folder, "dir")
+    rmdir(figoutput_folder, 's');
+end
+mkdir(figoutput_folder);
 
 % Load instrinsic
 json_data = loadjson(fullfile("data", exp_name, sprintf("%s_intrinsic.json", camera_name)));
@@ -298,12 +306,15 @@ for i = 1:n_pairs
         ylabel('y');
         zlabel('z');
         view([30,10]);
+
+        savefig(fullfile(figoutput_folder, ...
+            sprintf("%s.fig", camera_frames{index_camera, 'image_name'}{1})));
     end
 end
 
 % Calibrate Lidar to Camera
 tform_init = computeInitialTransform(lidarCorners3d, imageCorners3d);
-tform = refineTransform(lidarCorners3d, imageCorners3d, tform_init);
+[tform, fval, n_use] = refineTransform(lidarCorners3d, imageCorners3d, tform_init, fval_thred, n_thred);
 
 %% fuse visit lidar and camera
 if show_on
@@ -343,17 +354,19 @@ if show_on
         ylabel('y');
         zlabel('z');
         title('pcd_checkboard_with_color', 'Interpreter', 'none', "Color", 'w');
+
+        savefig(fullfile(figoutput_folder, ...
+            sprintf("vis_%s.fig", camera_frames{index_camera, 'image_name'}{1})));
     end
 end
 
 % calculate and visualize errors
 [errors_translation, errors_rotation, errors_reprojection] = computeErrors( ...
     lidarCorners3d, imageCorners3d, cameraParams, tform);
-helperShowError(errors_translation, errors_rotation, errors_reprojection);
+helperShowError(errors_translation, errors_rotation, errors_reprojection, camera_frames{:, 'image_name'});
 savefig(fullfile(output_folder, sprintf("%s_to_%s_error.fig", lidar_name, camera_name)));
 
 % save as json
-RT = tform.A;
-json_data = struct("extrinsic_matrix", RT);
+json_data = struct("extrinsic_matrix", tform.A);
 json_path = fullfile(output_folder, sprintf("%s_to_%s_extrinsic.json", lidar_name, camera_name));
 savejson('', json_data, json_path);

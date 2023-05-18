@@ -1,4 +1,4 @@
-function helperShowError(errors_translation, errors_rotation, errors_reprojection)
+function helperShowError(errors_translation, errors_rotation, errors_reprojection, names)
 %helperShowError Helper function to display calibration errors
 %
 % This is an example helper function that is subject to change or removal in
@@ -36,17 +36,22 @@ axis(axes3,'tight');
 disableDefaultInteractivity(axes3)
 
 set(figureH,'Visible','on');
-numFrames = size(errors_translation,1);
 bar(axes1,errors_translation);
-line1H = plot(axes1,[1,numFrames],[mean(errors_translation),mean(errors_translation)],'--','Color','b');
+xticks(axes1, 1:size(names, 1));
+xticklabels(axes1, replace(names, "_", "\_"));
+line1H = yline(axes1,mean(errors_translation),'--','Color','r');
 legend(line1H,strcat('Overall Mean Translation Error: ', num2str(mean(errors_translation)),' in m'),'Location','southeast');
 
 bar(axes2,errors_rotation);
-line2H=plot(axes2,[1,numFrames],[mean(errors_rotation),mean(errors_rotation)],'--','Color','b');
+xticks(axes2, 1:size(names, 1));
+xticklabels(axes2, replace(names, "_", "\_"));
+line2H=yline(axes2,mean(errors_rotation),'--','Color','r');
 legend(line2H,strcat('Overall Mean Rotation Error: ', num2str(mean(errors_rotation)),' in deg'),'Location','southeast');
 
 bar(axes3,errors_reprojection);
-line3H=plot(axes3,[1,numFrames],[mean(errors_reprojection),mean(errors_reprojection)],'--','Color','b');
+xticks(axes3, 1:size(names, 1));
+xticklabels(axes3, replace(names, "_", "\_"));
+line3H=yline(axes3,mean(errors_reprojection),'--','Color','r');
 legend(line3H,strcat('Overall Mean Reprojection Error: ', num2str(mean(errors_reprojection)),' in pixel'),'Location','southeast');
 
 end
