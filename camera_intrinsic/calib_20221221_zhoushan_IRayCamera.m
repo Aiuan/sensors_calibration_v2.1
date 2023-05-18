@@ -7,9 +7,9 @@ board_nrow = 10;
 board_ncol = 9;
 show_on = 1;
 output_root = "runs";
-error_mean_thred = 0.2;
-error_std_thred = 0.1;
-n_thred = 10;
+% error_mean_thred = 0.1;
+% error_std_thred = 0.02;
+n_thred = 15;
 
 output_folder = fullfile(output_root, exp_name);
 if ~exist(output_folder, "dir")
@@ -134,13 +134,13 @@ while true
     ylabel("ReprojectionErrors");
     grid on;
 
-    if mean(errors) <= error_mean_thred
-        break;
-    end
-
-    if std(errors) <= error_std_thred
-        break;
-    end
+%     if mean(errors) <= error_mean_thred
+%         break;
+%     end
+% 
+%     if std(errors) <= error_std_thred
+%         break;
+%     end
 
     if sum(imagesUsed) <= n_thred
         break;
