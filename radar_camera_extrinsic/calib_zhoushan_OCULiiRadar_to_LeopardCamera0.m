@@ -12,29 +12,46 @@ if ~exist(output_folder, "dir")
     mkdir(output_folder);
 end
 
+figoutput_folder = fullfile(output_root, exp_name, sprintf("%s_to_%s", radar_name, camera_name));
+if exist(figoutput_folder, "dir")
+    rmdir(figoutput_folder, 's');
+end
+mkdir(figoutput_folder);
+
 % Load instrinsic
-json_data = loadjson(fullfile("data", exp_name, sprintf("%s_intrinsic.json", camera_name)));
-intrinsics = cameraIntrinsics( ...
-    [json_data.intrinsic_matrix(1,1), json_data.intrinsic_matrix(2,2)], ...
-    [json_data.intrinsic_matrix(1,3), json_data.intrinsic_matrix(2,3)], ...
-    json_data.image_size, ...
-    'RadialDistortion', json_data.radial_distortion, ...
-    'TangentialDistortion', json_data.tangential_distortion, ...
-    'Skew', 0.000000);
+root_calib = fullfile("data", exp_name);
+intrinsic_IRayCamera = load_intrinsic(fullfile(root_calib, "IRayCamera_intrinsic.json"));
+extrinsic_IRayCamera_to_LeopardCamera0 = load_extrinsic( ...
+    fullfile(root_calib, "IRayCamera_to_LeopardCamera0_extrinsic.json"));
+intrinsic_LeopardCamera0 = load_intrinsic(fullfile(root_calib, "LeopardCamera0_intrinsic.json"));
+intrinsic_LeopardCamera1 = load_intrinsic(fullfile(root_calib, "LeopardCamera1_intrinsic.json"));
+extrinsic_LeopardCamera1_to_LeopardCamera0 = load_extrinsic( ...
+    fullfile(root_calib, "LeopardCamera1_to_LeopardCamera0_extrinsic.json"));
 
 % load camera frames
-camera_points = readmatrix(fullfile("data", exp_name, sprintf("%s.xlsx", camera_name)));
+points_IRayCamera = readmatrix(fullfile("data", exp_name, "IRayCamera.xlsx"));
+points_LeopardCamera0 = readmatrix(fullfile("data", exp_name, "LeopardCamera0.xlsx"));
+points_LeopardCamera1 = readmatrix(fullfile("data", exp_name, "LeopardCamera1.xlsx"));
 % load radar frames
-radar_points = readmatrix(fullfile("data", exp_name, sprintf("%s.xlsx", radar_name)));
+points_radar = readmatrix(fullfile("data", exp_name, sprintf("%s.xlsx", radar_name)));
+
 % find valid pairs
-mask_camera_valid = ~(sum(camera_points == 0, 2)==size(camera_points, 2));
-mask_radar_valid = ~(sum(radar_points == 0, 2)==size(radar_points, 2));
-mask_valid = mask_camera_valid & mask_radar_valid;
+mask_IRayCamera_valid = ~(sum(points_IRayCamera == 0, 2)==size(points_IRayCamera, 2));
+mask_LeopardCamera0_valid = ~(sum(points_LeopardCamera0 == 0, 2)==size(points_LeopardCamera0, 2));
+mask_LeopardCamera1_valid = ~(sum(points_LeopardCamera1 == 0, 2)==size(points_LeopardCamera1, 2));
+mask_radar_valid = ~(sum(points_radar == 0, 2)==size(points_radar, 2));
+mask_valid = mask_IRayCamera_valid & mask_LeopardCamera0_valid & mask_LeopardCamera1_valid & mask_radar_valid;
 n_pairs = sum(mask_valid);
-camera_points = camera_points(mask_valid, :);
-radar_points = radar_points(mask_valid, :);
+
+points_IRayCamera = points_IRayCamera(mask_valid, :);
+points_LeopardCamera0 = points_LeopardCamera0(mask_valid, :);
+points_LeopardCamera1 = points_LeopardCamera1(mask_valid, :);
+points_radar = points_radar(mask_valid, :);
+
 % undistort points
-camera_points_undistorted = undistortPoints(camera_points, intrinsics);
+points_IRayCamera_undistorted = undistortPoints(points_IRayCamera, intrinsic_IRayCamera);
+points_LeopardCamera0_undistorted = undistortPoints(points_LeopardCamera0, intrinsic_LeopardCamera0);
+points_LeopardCamera1_undistorted = undistortPoints(points_LeopardCamera1, intrinsic_LeopardCamera1);
 
 % Defind x
 x=[sym('thetax');sym('thetay');sym('thetaz');sym('tx');sym('ty');sym('tz')];
@@ -46,17 +63,27 @@ xk=[0;0;0;0;0;0];
 Rx=[1,0,0;0,cos(x(1)),sin(x(1));0,-sin(x(1)),cos(x(1))];
 Ry=[cos(x(2)),0,-sin(x(2));0,1,0;sin(x(2)),0,cos(x(2))];
 Rz=[cos(x(3)),sin(x(3)),0;-sin(x(3)),cos(x(3)),0;0,0,1];
-B=[Rx*Ry*Rz,[x(4);x(5);x(6)]];
-
-% Construct transform matrix
-A = intrinsics.K;
-H = A*B;
+B=[Rx*Ry*Rz,[x(4);x(5);x(6)]; 0, 0, 0, 1];
 
 % Construct optimization function's by calculate projection error
-xyz1 = [radar_points, ones(n_pairs, 1)];
-uvz = xyz1 * H';
-uv = uvz(:, 1:2) ./ uvz(:, 3);
-f = camera_points_undistorted - uv;
+xyz1_radar = [points_radar, ones(n_pairs, 1)]';
+
+xyz1_LeopardCamera0 = B * xyz1_radar;
+uvw_LeopardCamera0 = intrinsic_LeopardCamera0.K * xyz1_LeopardCamera0(1:3, :);
+uv_LeopardCamera0 = uvw_LeopardCamera0(1:2, :) ./ uvw_LeopardCamera0(3, :);
+f_LeopardCamera0 = points_LeopardCamera0_undistorted' - uv_LeopardCamera0;
+
+xyz1_LeopardCamera1 = invert(extrinsic_LeopardCamera1_to_LeopardCamera0).A * xyz1_LeopardCamera0;
+uvw_LeopardCamera1 = intrinsic_LeopardCamera1.K * xyz1_LeopardCamera1(1:3, :);
+uv_LeopardCamera1 = uvw_LeopardCamera1(1:2, :) ./ uvw_LeopardCamera1(3, :);
+f_LeopardCamera1 = points_LeopardCamera1_undistorted' - uv_LeopardCamera1;
+
+xyz1_IRayCamera = invert(extrinsic_IRayCamera_to_LeopardCamera0).A * xyz1_LeopardCamera0;
+uvw_IRayCamera = intrinsic_IRayCamera.K * xyz1_IRayCamera(1:3, :);
+uv_IRayCamera = uvw_IRayCamera(1:2, :) ./ uvw_IRayCamera(3, :);
+f_IRayCamera = points_IRayCamera_undistorted' - uv_IRayCamera;
+
+f = [f_IRayCamera, f_LeopardCamera0, f_LeopardCamera1];
 f = reshape(f, [], 1);
 
 %L-M算法部分，求解非线性优化问题，优化变量x。
@@ -136,7 +163,7 @@ xlabel("step");
 ylabel("mse");
 
 % calculate errors
-errors = reshape(double(subs(f,x,xk)), [], 2);
+errors = reshape(double(subs(f,x,xk)), 2, [])';
 errors_u = abs(errors(:, 1)); 
 errors_v = abs(errors(:, 2)); 
 errors_uv = sqrt(sum(errors.^2, 2));
@@ -145,7 +172,7 @@ figure(2);
 subplot(2, 2, [1, 2]);
 bar(errors_uv);
 hold on;
-line([1, length(errors_uv)], [mean(errors_uv), mean(errors_uv)],'linewidth',2,'color', 'r');
+yline(mean(errors_uv),'linewidth',2,'color', 'r');
 text(length(errors_uv), mean(errors_uv), ...
     sprintf('%.2f pixels', mean(errors_uv)), "Color", "red", ...
     "HorizontalAlignment", "left", "VerticalAlignment", "bottom");
@@ -157,7 +184,7 @@ ylabel('errors_uv', "Interpreter", "none");
 subplot(2, 2, 3);
 bar(errors_u);
 hold on;
-line([1, length(errors_u)], [mean(errors_u), mean(errors_u)],'linewidth',2,'color', 'r');
+yline(mean(errors_u),'linewidth',2,'color', 'r');
 text(length(errors_u), mean(errors_u), ...
     sprintf('%.2f pixels', mean(errors_u)), "Color", "red", ...
     "HorizontalAlignment", "left", "VerticalAlignment", "bottom");
@@ -180,39 +207,38 @@ ylabel('errors_v', "Interpreter", "none");
 
 savefig(fullfile(output_folder, sprintf("%s_to_%s_error.fig", radar_name, camera_name)));
 
-%% show project pcd on image
-if show_on    
-    image_folder = fullfile("data", exp_name, camera_name);
-    images = dir(image_folder);
-    images = sort_nat({images.name});
-    images = images(3:end)';
-    images = images(mask_valid);
-    
-    figure(3);
-    for i = 1:n_pairs
-        image_path = fullfile(image_folder, images{i});
-        image = imread(image_path);
-        image_undistort = undistortImage(image, intrinsics);
-        project_points = double(subs(uv,x,xk));
-        project_points = round(project_points);
+%% show project pcd on image  
+image_folder = fullfile("data", exp_name, camera_name);
+images = dir(image_folder);
+images = sort_nat({images.name});
+images = images(3:end)';
+images = images(mask_valid);
 
-        imshow(image_undistort);
-        hold on;
-        scatter(camera_points_undistorted(i, 1), camera_points_undistorted(i, 2), 'filled', 'green');
-        text(camera_points_undistorted(i, 1), camera_points_undistorted(i, 2), ...
-            "gt point", "Color", "green", "VerticalAlignment", "top");
-        scatter(project_points(i, 1), project_points(i, 2), 'filled', 'red');
-        text(project_points(i, 1), project_points(i, 2), "projected point", "Color", "red", ...
-            "HorizontalAlignment", "right", "VerticalAlignment", "top");
-        hold off;
-        title(sprintf("%s\nerror_uv=%.2f pixels, error_u=%.2f pixels, error_v=%.2f pixels", ...
-            image_path, errors_uv(i), errors_u(i), errors_v(i)), ...
-            "Interpreter", "none");
-    end    
-end
+figure(3);
+for i = 1:n_pairs
+    image_path = fullfile(image_folder, images{i});
+    image = imread(image_path);
+    image_undistort = undistortImage(image, intrinsic_LeopardCamera0);
+    project_points = double(subs(uv_LeopardCamera0,x,xk))';
+    project_points = round(project_points);
+
+    imshow(image_undistort);
+    hold on;
+    scatter(points_LeopardCamera0_undistorted(i, 1), points_LeopardCamera0_undistorted(i, 2), 'filled', 'green');
+    text(points_LeopardCamera0_undistorted(i, 1), points_LeopardCamera0_undistorted(i, 2), ...
+        "gt point", "Color", "green", "VerticalAlignment", "top");
+    scatter(project_points(i, 1), project_points(i, 2), 'filled', 'red');
+    text(project_points(i, 1), project_points(i, 2), "projected point", "Color", "red", ...
+        "HorizontalAlignment", "right", "VerticalAlignment", "top");
+    hold off;
+    title(sprintf("%s\nerror_uv=%.2f pixels, error_u=%.2f pixels, error_v=%.2f pixels", ...
+        image_path, errors_uv(i), errors_u(i), errors_v(i)), ...
+        "Interpreter", "none");
+
+    savefig(fullfile(figoutput_folder, replace(images{i}, ".png", "")));
+end    
 
 % save as json
-extrinsic_matrix = double(subs(B,x,xk));
-json_data = struct("extrinsic_matrix", extrinsic_matrix);
+json_data = struct("extrinsic_matrix", double(subs(B,x,xk)));
 json_path = fullfile(output_folder, sprintf("%s_to_%s_extrinsic.json", radar_name, camera_name));
 savejson('', json_data, json_path);
