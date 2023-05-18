@@ -9,6 +9,7 @@ board_nrow = 9;
 board_ncol = 7;
 show_on = 1;
 output_root = "runs";
+show_disparity_map = 1;
 
 output_folder = fullfile(output_root, exp_name);
 if ~exist(output_folder, "dir")
@@ -188,6 +189,49 @@ shouldComputeErrors = 1;
 estimationErrors = refine(stereoParams, imagePoints(:,:,:,1), ...
     imagePoints(:,:,:,2), shouldComputeErrors, isIntrinsicsFixed);
 displayErrors(estimationErrors, stereoParams);
+
+% show disparity map
+if show_disparity_map
+    figoutput_folder = fullfile(output_root, exp_name, sprintf("%s_to_%s", camera_name2, camera_name1));
+    if exist(figoutput_folder, "dir")
+        rmdir(figoutput_folder, 's');
+    end
+    mkdir(figoutput_folder);
+
+    for i = 1:n_pairs
+        % camera1
+        index_used1 = index_used(i, 1);
+        if params1{index_used1, 'fix'}
+            image_path1 = fullfile("data", exp_name, camera_name1, ...
+                [params1{index_used1, 'image_name'}{1}, '_fix.png']);
+        else
+            image_path1 = fullfile("data", exp_name, camera_name1, ...
+                [params1{index_used1, 'image_name'}{1}, '.png']);   
+        end
+        image1 = imread(image_path1);
+        
+      
+        % camera2
+        index_used2 = index_used(i, 2);
+        if params2{index_used2, 'fix'}
+            image_path2 = fullfile("data", exp_name, camera_name2, ...
+                [params2{index_used2, 'image_name'}{1}, '_fix.png']);
+        else
+            image_path2 = fullfile("data", exp_name, camera_name2, ...
+                [params2{index_used2, 'image_name'}{1}, '.png']);   
+        end
+        image2 = imread(image_path2);
+        
+        [I1, I2] = rectifyStereoImages(image1, image2, stereoParams);
+        figure(2);
+        imshow(stereoAnaglyph(I1, I2));
+        title(sprintf("%s\n%s", image_path1, image_path2), ...
+            "Interpreter", "none");
+    
+        savefig(fullfile(figoutput_folder, ...
+                sprintf("%s.fig", params1{index_used1, 'image_name'}{1})));
+    end
+end
 
 % View reprojection errors
 figure();
